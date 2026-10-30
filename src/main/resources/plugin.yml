@@ -1,10 +1,10 @@
 name: FlipMobs
-version: 1.2.0
+version: 1.3.0
 main: com.flipmobs.FlipMobs
 api-version: '1.21.11'
 author: jrt94660-cyber
-description: Every mob has a random bounty. Kill it directly or with an explosion to earn money.
-depend: [Vault]
+description: Random mob bounties and WorldGuard region mob spawning control.
+depend: [Vault, WorldGuard]
 softdepend: [CoinsEngine, ExcellentEconomy]
 commands:
   flipmobs:
