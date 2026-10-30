@@ -6,6 +6,7 @@ import net.kyori.adventure.text.Component;
 import org.bukkit.*;
 import org.bukkit.entity.*;
 import org.bukkit.event.*;
+import org.bukkit.event.block.BlockExplodeEvent;
 import org.bukkit.event.entity.*;
 import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.persistence.PersistentDataType;
