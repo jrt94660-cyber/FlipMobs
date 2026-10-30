@@ -5,6 +5,8 @@ import com.flipmobs.economy.EconomyHook;
 import com.flipmobs.util.MoneyFormatter;
 import com.sk89q.worldedit.math.BlockVector3;
 import com.sk89q.worldguard.WorldGuard;
+import com.sk89q.worldguard.protection.flags.Flags;
+import com.sk89q.worldguard.protection.flags.StateFlag;
 import com.sk89q.worldguard.protection.managers.RegionManager;
 import com.sk89q.worldguard.protection.regions.ProtectedRegion;
 import net.kyori.adventure.text.Component;
@@ -66,14 +68,27 @@ public final class MobBountyListener implements Listener {
      * This runs before the normal bounty setup handler so disallowed mobs
      * are cancelled before they can receive a bounty/name.
      */
-    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = false)
     public void onRegionMobSpawn(EntitySpawnEvent event) {
         if (!(event.getEntity() instanceof LivingEntity living) || !isEligible(living)) return;
-        if (!isInsideRestrictedRegion(event.getLocation())) return;
+
+        ProtectedRegion region = getRestrictedRegion(event.getLocation());
+        if (region == null) return;
 
         List<String> allowed = plugin.getConfig().getStringList("spawn-control.allowed-mobs");
         if (!allowed.contains(living.getType().name())) {
             event.setCancelled(true);
+            return;
+        }
+
+        // WorldGuard cancels EntitySpawnEvent when mob-spawning is DENY.
+        // This plugin is loaded after WorldGuard (plugin.yml depend), so this
+        // HIGHEST-priority handler runs after WorldGuard's handler and can
+        // selectively restore only the explicitly whitelisted mob types.
+        boolean overrideDeny = plugin.getConfig().getBoolean(
+                "spawn-control.override-mob-spawning-deny", true);
+        if (overrideDeny && region.getFlag(Flags.MOB_SPAWNING) == StateFlag.State.DENY) {
+            event.setCancelled(false);
         }
     }
 
@@ -160,22 +175,23 @@ public final class MobBountyListener implements Listener {
         recentHits.remove(mob.getUniqueId());
     }
 
-    private boolean isInsideRestrictedRegion(Location location) {
-        if (!plugin.getConfig().getBoolean("spawn-control.enabled", true)) return false;
+    private ProtectedRegion getRestrictedRegion(Location location) {
+        if (!plugin.getConfig().getBoolean("spawn-control.enabled", true)) return null;
         String regionId = plugin.getConfig().getString("spawn-control.region", "spawn");
-        if (regionId == null || regionId.isBlank() || location.getWorld() == null) return false;
+        if (regionId == null || regionId.isBlank() || location.getWorld() == null) return null;
 
         RegionManager manager = WorldGuard.getInstance().getPlatform().getRegionContainer()
                 .get(com.sk89q.worldedit.bukkit.BukkitAdapter.adapt(location.getWorld()));
-        if (manager == null) return false;
+        if (manager == null) return null;
 
         ProtectedRegion region = manager.getRegion(regionId.toLowerCase(java.util.Locale.ROOT));
         if (region == null) {
             plugin.getLogger().fine("Configured WorldGuard region '" + regionId + "' was not found in "
                     + location.getWorld().getName() + ".");
-            return false;
+            return null;
         }
-        return region.contains(BlockVector3.at(location.getBlockX(), location.getBlockY(), location.getBlockZ()));
+        return region.contains(BlockVector3.at(location.getBlockX(), location.getBlockY(), location.getBlockZ()))
+                ? region : null;
     }
 
     private void ensureBounty(LivingEntity entity) {
