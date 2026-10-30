@@ -3,9 +3,14 @@ package com.flipmobs.listener;
 import com.flipmobs.FlipMobs;
 import com.flipmobs.economy.EconomyHook;
 import com.flipmobs.util.MoneyFormatter;
+import com.sk89q.worldedit.math.BlockVector3;
+import com.sk89q.worldguard.WorldGuard;
+import com.sk89q.worldguard.protection.managers.RegionManager;
+import com.sk89q.worldguard.protection.regions.ProtectedRegion;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.Location;
+import org.bukkit.NamespacedKey;
 import org.bukkit.entity.*;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.EventPriority;
@@ -14,9 +19,9 @@ import org.bukkit.event.entity.*;
 import org.bukkit.event.block.BlockExplodeEvent;
 import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.persistence.PersistentDataType;
-import org.bukkit.NamespacedKey;
 
 import java.util.Comparator;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -57,10 +62,21 @@ public final class MobBountyListener implements Listener {
     }
 
     /*
-     * EntitySpawnEvent also catches plugin-spawned living entities that do not
-     * necessarily go through CreatureSpawnEvent. Apply the label one tick later
-     * so other spawn listeners have finished modifying the entity.
+     * Restrict living-entity spawns in the configured WorldGuard region.
+     * This runs before the normal bounty setup handler so disallowed mobs
+     * are cancelled before they can receive a bounty/name.
      */
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
+    public void onRegionMobSpawn(EntitySpawnEvent event) {
+        if (!(event.getEntity() instanceof LivingEntity living) || !isEligible(living)) return;
+        if (!isInsideRestrictedRegion(event.getLocation())) return;
+
+        List<String> allowed = plugin.getConfig().getStringList("spawn-control.allowed-mobs");
+        if (!allowed.contains(living.getType().name())) {
+            event.setCancelled(true);
+        }
+    }
+
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     public void onEntitySpawn(EntitySpawnEvent event) {
         if (event.getEntity() instanceof LivingEntity living && isEligible(living)) {
@@ -118,8 +134,6 @@ public final class MobBountyListener implements Listener {
         LivingEntity mob = event.getEntity();
         if (!isEligible(mob)) return;
 
-        // Safety net: even if another plugin skipped the spawn event, a mob
-        // that dies still receives a bounty before its payout is calculated.
         if (getBounty(mob) <= 0) assignBounty(mob);
         double amount = getBounty(mob);
         if (amount <= 0) return;
@@ -144,6 +158,24 @@ public final class MobBountyListener implements Listener {
                 .replace("%amount%", MoneyFormatter.format(plugin, amount));
         killer.sendActionBar(Component.text(FlipMobs.color(message)));
         recentHits.remove(mob.getUniqueId());
+    }
+
+    private boolean isInsideRestrictedRegion(Location location) {
+        if (!plugin.getConfig().getBoolean("spawn-control.enabled", true)) return false;
+        String regionId = plugin.getConfig().getString("spawn-control.region", "spawn");
+        if (regionId == null || regionId.isBlank() || location.getWorld() == null) return false;
+
+        RegionManager manager = WorldGuard.getInstance().getPlatform().getRegionContainer()
+                .get(com.sk89q.worldedit.bukkit.BukkitAdapter.adapt(location.getWorld()));
+        if (manager == null) return false;
+
+        ProtectedRegion region = manager.getRegion(regionId.toLowerCase(java.util.Locale.ROOT));
+        if (region == null) {
+            plugin.getLogger().fine("Configured WorldGuard region '" + regionId + "' was not found in "
+                    + location.getWorld().getName() + ".");
+            return false;
+        }
+        return region.contains(BlockVector3.at(location.getBlockX(), location.getBlockY(), location.getBlockZ()));
     }
 
     private void ensureBounty(LivingEntity entity) {
