@@ -1,0 +1,35 @@
+# FlipMobs configuration
+bounty:
+  minimum: 100000
+  maximum: 30000000
+  name-format: "&6$%amount%"
+  show-on-all-mobs: true
+  exclude:
+    - PLAYER
+    - ARMOR_STAND
+    - MARKER
+
+economy:
+  # Supported: VAULT, COINSENGINE, EXCELLENTECONOMY
+  # CoinsEngine and ExcellentEconomy are accessed through their Vault bridge.
+  provider: VAULT
+  symbol: "$"
+
+reward:
+  actionbar: "&a+%symbol%%amount% &7Mob bounty claimed!"
+  require-player-attribution-for-explosions: true
+  last-attacker-seconds: 30
+  explosion-attribution-radius: 12.0
+
+format:
+  decimals: 2
+  thousands-suffix: "K"
+  millions-suffix: "M"
+
+messages:
+  prefix: "&8[&6FlipMobs&8] "
+  reloaded: "&aConfiguration reloaded."
+  no-permission: "&cYou don't have permission."
+  usage: "&cUsage: /flipmobs <reload|info>"
+  info: "&7FlipMobs &f%version% &8| &7Provider: &f%provider%"
+  economy-unavailable: "&cNo economy provider is available. Check your provider and Vault hook."
