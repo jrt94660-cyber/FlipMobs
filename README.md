@@ -36,4 +36,4 @@ Build with JDK 21 and Maven:
 mvn clean package
 ```
 
-Jar: `target/FlipMobs-1.1.0.jar`
+Jar: `target/FlipMobs-1.2.0.jar`
