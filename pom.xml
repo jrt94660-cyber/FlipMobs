@@ -4,7 +4,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.flipmobs</groupId>
     <artifactId>FlipMobs</artifactId>
-    <version>1.1.0</version>
+    <version>1.2.0</version>
     <packaging>jar</packaging>
     <name>FlipMobs</name>
     <description>Random mob bounties with explosion kill rewards.</description>
@@ -43,7 +43,7 @@
     </dependencies>
 
     <build>
-        <finalName>FlipMobs-1.1.0</finalName>
+        <finalName>FlipMobs-1.2.0</finalName>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
