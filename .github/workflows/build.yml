@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Java 21
+      - name: Set up Java 21 (compile for the oldest supported server API)
         uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -21,5 +21,5 @@ jobs:
       - name: Upload plugin jar
         uses: actions/upload-artifact@v4
         with:
-          name: FlipMobs-1.0.0
-          path: target/FlipMobs-1.0.0.jar
+          name: FlipMobs-1.1.0
+          path: target/FlipMobs-1.1.0.jar
