@@ -21,11 +21,12 @@ By default, the WorldGuard region named `spawn` only allows bats to spawn. Confi
 spawn-control:
   enabled: true
   region: spawn
+  override-mob-spawning-deny: true
   allowed-mobs:
     - BAT
 ```
 
-Change `region` to your WorldGuard region ID and add allowed entity types to `allowed-mobs`. Any other living entity spawn inside that region is cancelled. Set `enabled: false` to disable this rule.
+Change `region` to your WorldGuard region ID and add allowed entity types to `allowed-mobs`. Any other living entity spawn inside that region is cancelled. With `override-mob-spawning-deny: true`, whitelisted mobs are allowed to spawn even when that region has WorldGuard's `mob-spawning: deny` flag. Set it to `false` to respect WorldGuard's deny flag for every mob, or set `enabled: false` to disable this rule.
 
 ## Economy
 
@@ -46,4 +47,4 @@ Build with JDK 21 and Maven:
 mvn clean package
 ```
 
-Jar: `target/FlipMobs-1.3.0.jar`
+Jar: `target/FlipMobs-1.3.1.jar`
