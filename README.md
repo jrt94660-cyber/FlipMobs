@@ -1,21 +1,31 @@
 # FlipMobs
 
-Paper plugin: random mob bounties, direct and explosion kill payouts, and action-bar rewards.
-
-Default bounty range: $100,000-$30,000,000. Bounties persist on the mob so the name display and payout stay in sync.
+Paper plugin: random mob bounties, direct and explosion kill payouts, action-bar rewards, and WorldGuard region mob-spawn control.
 
 ## Supported versions
 
 - Paper 1.21.11
 - Paper 26.3
 
-This is a single compatibility build compiled against the Paper 1.21.11 API and targeting Java 21 bytecode. Use Java 21 to run Paper 1.21.11. Paper 26.3 requires Java 25 to run the server; the same Java 21-targeted plugin JAR can run on that newer runtime.
-
-The plugin intentionally uses the older shared Bukkit/Paper API surface rather than compiling against 26.x-only APIs.
+The plugin is compiled for Java 21 bytecode. Run Paper 1.21.11 with Java 21; Paper 26.3 requires Java 25 and can run Java 21-targeted plugins.
 
 ## Requirements
 
-Paper, Vault, and a Vault-compatible economy provider.
+Paper, Vault, WorldGuard, and a Vault-compatible economy provider.
+
+## WorldGuard mob region
+
+By default, the WorldGuard region named `spawn` only allows bats to spawn. Configure it in `config.yml`:
+
+```yaml
+spawn-control:
+  enabled: true
+  region: spawn
+  allowed-mobs:
+    - BAT
+```
+
+Change `region` to your WorldGuard region ID and add allowed entity types to `allowed-mobs`. Any other living entity spawn inside that region is cancelled. Set `enabled: false` to disable this rule.
 
 ## Economy
 
@@ -36,4 +46,4 @@ Build with JDK 21 and Maven:
 mvn clean package
 ```
 
-Jar: `target/FlipMobs-1.2.0.jar`
+Jar: `target/FlipMobs-1.3.0.jar`
