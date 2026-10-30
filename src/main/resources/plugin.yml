@@ -1,0 +1,17 @@
+name: FlipMobs
+version: 1.0.0
+main: com.flipmobs.FlipMobs
+api-version: '1.21.11'
+author: jrt94660-cyber
+description: Every mob has a random bounty. Kill it directly or with an explosion to earn money.
+softdepend: [Vault, CoinsEngine, ExcellentEconomy]
+commands:
+  flipmobs:
+    description: FlipMobs administration command.
+    usage: /flipmobs <reload|info>
+    aliases: [fmobs]
+    permission: flipmobs.admin
+permissions:
+  flipmobs.admin:
+    description: Allows managing FlipMobs.
+    default: op
