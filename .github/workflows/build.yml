@@ -1,0 +1,25 @@
+name: Build FlipMobs
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Build with Maven
+        run: mvn --batch-mode clean package
+      - name: Upload plugin jar
+        uses: actions/upload-artifact@v4
+        with:
+          name: FlipMobs-1.0.0
+          path: target/FlipMobs-1.0.0.jar
