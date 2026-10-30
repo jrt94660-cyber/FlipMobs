@@ -9,6 +9,15 @@ bounty:
     - ARMOR_STAND
     - MARKER
 
+# WorldGuard spawn-region mob whitelist.
+# Only the mob types listed below may spawn inside this region.
+# Use uppercase Bukkit EntityType names, for example BAT, ZOMBIE, COW.
+spawn-control:
+  enabled: true
+  region: spawn
+  allowed-mobs:
+    - BAT
+
 economy:
   # Supported: VAULT, COINSENGINE, EXCELLENTECONOMY
   # CoinsEngine and ExcellentEconomy are accessed through their Vault bridge.
