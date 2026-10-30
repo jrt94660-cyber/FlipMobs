@@ -1,91 +1,232 @@
 package com.flipmobs.listener;
+
 import com.flipmobs.FlipMobs;
 import com.flipmobs.economy.EconomyHook;
 import com.flipmobs.util.MoneyFormatter;
 import net.kyori.adventure.text.Component;
-import org.bukkit.*;
+import org.bukkit.Bukkit;
+import org.bukkit.Location;
 import org.bukkit.entity.*;
-import org.bukkit.event.*;
-import org.bukkit.event.block.BlockExplodeEvent;
+import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
+import org.bukkit.event.Listener;
 import org.bukkit.event.entity.*;
+import org.bukkit.event.block.BlockExplodeEvent;
 import org.bukkit.event.world.ChunkLoadEvent;
 import org.bukkit.persistence.PersistentDataType;
-import java.util.*;
+import org.bukkit.NamespacedKey;
+
+import java.util.Comparator;
+import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class MobBountyListener implements Listener {
- private final FlipMobs plugin;
- private final EconomyHook economy;
- private final NamespacedKey key;
- private final Map<UUID, Hit> hits = new ConcurrentHashMap<>();
- public MobBountyListener(FlipMobs p, EconomyHook e) { plugin=p; economy=e; key=new NamespacedKey(p,"mob_bounty"); }
- public void initializeLoadedMobs(){ Bukkit.getWorlds().forEach(w->w.getLivingEntities().forEach(this::ensure)); }
- public void refreshLoadedMobLabels(){ Bukkit.getWorlds().forEach(w->w.getLivingEntities().forEach(m->{if(eligible(m)&&value(m)>0) label(m);})); }
- public void shutdown(){ hits.clear(); }
+    private final FlipMobs plugin;
+    private final EconomyHook economy;
+    private final NamespacedKey bountyKey;
+    private final Map<UUID, Hit> recentHits = new ConcurrentHashMap<>();
 
- @EventHandler(priority=EventPriority.MONITOR)
- public void spawn(CreatureSpawnEvent e){ if(plugin.getConfig().getBoolean("bounty.show-on-all-mobs",true)) ensure(e.getEntity()); }
- @EventHandler(priority=EventPriority.MONITOR)
- public void chunk(ChunkLoadEvent e){ if(plugin.getConfig().getBoolean("bounty.show-on-all-mobs",true)) for(Entity x:e.getChunk().getEntities()) if(x instanceof LivingEntity m) ensure(m); }
+    public MobBountyListener(FlipMobs plugin, EconomyHook economy) {
+        this.plugin = plugin;
+        this.economy = economy;
+        this.bountyKey = new NamespacedKey(plugin, "mob_bounty");
+    }
 
- @EventHandler(priority=EventPriority.MONITOR,ignoreCancelled=true)
- public void hit(EntityDamageByEntityEvent e){
-  if(!(e.getEntity() instanceof LivingEntity m)||m instanceof Player)return;
-  Player p=playerSource(e.getDamager()); if(p!=null) remember(m,p);
- }
- @EventHandler(priority=EventPriority.MONITOR,ignoreCancelled=true)
- public void explosionDamage(EntityDamageEvent e){
-  if(!(e.getEntity() instanceof LivingEntity m)||m instanceof Player)return;
-  if(e.getCause()!=EntityDamageEvent.DamageCause.ENTITY_EXPLOSION&&e.getCause()!=EntityDamageEvent.DamageCause.BLOCK_EXPLOSION)return;
-  Player p=recent(m); if(p==null)p=nearest(m.getLocation(),radius());
-  if(p!=null)remember(m,p);
- }
- @EventHandler(priority=EventPriority.MONITOR)
- public void entityExplosion(EntityExplodeEvent e){
-  Player p=playerSource(e.getEntity()); if(p==null&&e.getEntity() instanceof TNTPrimed t)p=playerSource(t.getSource());
-  markExplosion(e.getLocation(),p);
- }
- @EventHandler(priority=EventPriority.MONITOR)
- public void blockExplosion(BlockExplodeEvent e){ markExplosion(e.getBlock().getLocation(),null); }
+    public void initializeLoadedMobs() {
+        for (var world : Bukkit.getWorlds()) {
+            for (LivingEntity entity : world.getLivingEntities()) {
+                ensureBounty(entity);
+            }
+        }
+    }
 
- @EventHandler(priority=EventPriority.MONITOR)
- public void death(EntityDeathEvent e){
-  LivingEntity m=e.getEntity(); if(!eligible(m))return;
-  double amount=value(m); if(amount<=0)return;
-  Player p=m.getKiller(); if(p==null)p=recent(m);
-  if(p==null&&!plugin.getConfig().getBoolean("reward.require-player-attribution-for-explosions",true))p=nearest(m.getLocation(),radius());
-  if(p==null)return;
-  if(!economy.deposit(p,amount)){plugin.getLogger().warning("Failed to pay mob bounty to "+p.getName()+". Check economy/Vault hook.");return;}
-  String msg=plugin.getConfig().getString("reward.actionbar","&a+%symbol%%amount% &7Mob bounty claimed!");
-  msg=msg.replace("%symbol%",plugin.getConfig().getString("economy.symbol","$")).replace("%amount%",MoneyFormatter.format(plugin,amount));
-  p.sendActionBar(Component.text(FlipMobs.color(msg))); hits.remove(m.getUniqueId());
- }
+    public void refreshLoadedMobLabels() {
+        for (var world : Bukkit.getWorlds()) {
+            for (LivingEntity entity : world.getLivingEntities()) {
+                if (isEligible(entity)) {
+                    if (getBounty(entity) <= 0) assignBounty(entity);
+                    updateLabel(entity);
+                }
+            }
+        }
+    }
 
- private void ensure(LivingEntity m){
-  if(!eligible(m))return;
-  double v=value(m);
-  if(v<=0){double min=Math.max(0,plugin.getConfig().getDouble("bounty.minimum",100000));double max=Math.max(min,plugin.getConfig().getDouble("bounty.maximum",30000000));v=Math.floor((min+Math.random()*(max-min))*100)/100; m.getPersistentDataContainer().set(key,PersistentDataType.DOUBLE,v);}
-  label(m);
- }
- private void label(LivingEntity m){
-  String f=plugin.getConfig().getString("bounty.name-format","&6$%amount%");
-  m.setCustomName(FlipMobs.color(f.replace("%amount%",MoneyFormatter.format(plugin,value(m)))));m.setCustomNameVisible(true);
- }
- private double value(LivingEntity m){Double v=m.getPersistentDataContainer().get(key,PersistentDataType.DOUBLE);return v==null?0:v;}
- private boolean eligible(LivingEntity m){return !(m instanceof Player)&&!(m instanceof ArmorStand)&&!plugin.getConfig().getStringList("bounty.exclude").contains(m.getType().name());}
- private double radius(){return plugin.getConfig().getDouble("reward.explosion-attribution-radius",12);}
- private void remember(LivingEntity m,Player p){hits.put(m.getUniqueId(),new Hit(p.getUniqueId(),System.currentTimeMillis()+plugin.getConfig().getLong("reward.last-attacker-seconds",30)*1000));}
- private Player recent(LivingEntity m){Hit h=hits.get(m.getUniqueId());if(h==null)return null;if(h.until<System.currentTimeMillis()){hits.remove(m.getUniqueId());return null;}return Bukkit.getPlayer(h.player);}
- private void markExplosion(Location l,Player source){
-  for(Entity x:l.getWorld().getNearbyEntities(l,radius(),radius(),radius()))if(x instanceof LivingEntity m&&eligible(m)){Player p=source;if(p==null)p=recent(m);if(p==null)p=nearest(l,radius());if(p!=null)remember(m,p);}
- }
- private Player nearest(Location l,double r){return l.getWorld().getNearbyPlayers(l,r).stream().min(Comparator.comparingDouble(p->p.getLocation().distanceSquared(l))).orElse(null);}
- private Player playerSource(Entity x){
-  if(x instanceof Player p)return p;
-  if(x instanceof Projectile q&&q.getShooter() instanceof Player p)return p;
-  if(x instanceof TNTPrimed t&&t.getSource() instanceof Player p)return p;
-  if(x instanceof Tameable t&&t.getOwner() instanceof Player p)return p;
-  return null;
- }
- private record Hit(UUID player,long until){}
+    public void shutdown() {
+        recentHits.clear();
+    }
+
+    /*
+     * EntitySpawnEvent also catches plugin-spawned living entities that do not
+     * necessarily go through CreatureSpawnEvent. Apply the label one tick later
+     * so other spawn listeners have finished modifying the entity.
+     */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onEntitySpawn(EntitySpawnEvent event) {
+        if (event.getEntity() instanceof LivingEntity living && isEligible(living)) {
+            Bukkit.getScheduler().runTask(plugin, () -> {
+                if (living.isValid() && !living.isDead()) ensureBounty(living);
+            });
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onChunkLoad(ChunkLoadEvent event) {
+        for (Entity entity : event.getChunk().getEntities()) {
+            if (entity instanceof LivingEntity living && isEligible(living)) {
+                Bukkit.getScheduler().runTask(plugin, () -> {
+                    if (living.isValid() && !living.isDead()) ensureBounty(living);
+                });
+            }
+        }
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onDirectDamage(EntityDamageByEntityEvent event) {
+        if (!(event.getEntity() instanceof LivingEntity living) || living instanceof Player) return;
+        Player attacker = resolvePlayer(event.getDamager());
+        if (attacker != null) remember(living, attacker);
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onExplosionDamage(EntityDamageEvent event) {
+        if (!(event.getEntity() instanceof LivingEntity living) || living instanceof Player) return;
+        if (event.getCause() != EntityDamageEvent.DamageCause.ENTITY_EXPLOSION
+                && event.getCause() != EntityDamageEvent.DamageCause.BLOCK_EXPLOSION) return;
+
+        Player attacker = recentAttacker(living);
+        if (attacker == null) attacker = nearestPlayer(living.getLocation(), explosionRadius());
+        if (attacker != null) remember(living, attacker);
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onEntityExplosion(EntityExplodeEvent event) {
+        Player source = resolvePlayer(event.getEntity());
+        if (event.getEntity() instanceof TNTPrimed tnt && source == null) {
+            source = resolvePlayer(tnt.getSource());
+        }
+        markExplosion(event.getLocation(), source);
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onBlockExplosion(BlockExplodeEvent event) {
+        markExplosion(event.getBlock().getLocation(), null);
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR)
+    public void onMobDeath(EntityDeathEvent event) {
+        LivingEntity mob = event.getEntity();
+        if (!isEligible(mob)) return;
+
+        // Safety net: even if another plugin skipped the spawn event, a mob
+        // that dies still receives a bounty before its payout is calculated.
+        if (getBounty(mob) <= 0) assignBounty(mob);
+        double amount = getBounty(mob);
+        if (amount <= 0) return;
+
+        Player killer = mob.getKiller();
+        if (killer == null) killer = recentAttacker(mob);
+        if (killer == null && !plugin.getConfig().getBoolean(
+                "reward.require-player-attribution-for-explosions", true)) {
+            killer = nearestPlayer(mob.getLocation(), explosionRadius());
+        }
+        if (killer == null) return;
+
+        if (!economy.deposit(killer, amount)) {
+            plugin.getLogger().warning("Could not pay " + MoneyFormatter.format(plugin, amount)
+                    + " to " + killer.getName() + ". Vault economy is unavailable or rejected the deposit.");
+            return;
+        }
+
+        String message = plugin.getConfig().getString(
+                "reward.actionbar", "&a+%symbol%%amount% &7Mob bounty claimed!");
+        message = message.replace("%symbol%", plugin.getConfig().getString("economy.symbol", "$"))
+                .replace("%amount%", MoneyFormatter.format(plugin, amount));
+        killer.sendActionBar(Component.text(FlipMobs.color(message)));
+        recentHits.remove(mob.getUniqueId());
+    }
+
+    private void ensureBounty(LivingEntity entity) {
+        if (!isEligible(entity)) return;
+        if (getBounty(entity) <= 0) assignBounty(entity);
+        updateLabel(entity);
+    }
+
+    private void assignBounty(LivingEntity entity) {
+        double minimum = Math.max(0, plugin.getConfig().getDouble("bounty.minimum", 100000));
+        double maximum = Math.max(minimum, plugin.getConfig().getDouble("bounty.maximum", 30000000));
+        double amount = Math.floor((minimum + Math.random() * (maximum - minimum)) * 100.0) / 100.0;
+        entity.getPersistentDataContainer().set(bountyKey, PersistentDataType.DOUBLE, amount);
+    }
+
+    private void updateLabel(LivingEntity entity) {
+        String format = plugin.getConfig().getString("bounty.name-format", "&6$%amount%");
+        String label = format.replace("%amount%", MoneyFormatter.format(plugin, getBounty(entity)));
+        entity.setCustomName(FlipMobs.color(label));
+        entity.setCustomNameVisible(true);
+    }
+
+    private double getBounty(LivingEntity entity) {
+        Double amount = entity.getPersistentDataContainer().get(bountyKey, PersistentDataType.DOUBLE);
+        return amount == null ? 0 : amount;
+    }
+
+    private boolean isEligible(LivingEntity entity) {
+        if (entity instanceof Player || entity instanceof ArmorStand) return false;
+        return !plugin.getConfig().getStringList("bounty.exclude").contains(entity.getType().name());
+    }
+
+    private double explosionRadius() {
+        return Math.max(0, plugin.getConfig().getDouble("reward.explosion-attribution-radius", 12.0));
+    }
+
+    private void remember(LivingEntity mob, Player player) {
+        long expiry = System.currentTimeMillis()
+                + plugin.getConfig().getLong("reward.last-attacker-seconds", 30) * 1000L;
+        recentHits.put(mob.getUniqueId(), new Hit(player.getUniqueId(), expiry));
+    }
+
+    private Player recentAttacker(LivingEntity mob) {
+        Hit hit = recentHits.get(mob.getUniqueId());
+        if (hit == null) return null;
+        if (hit.expiresAt() < System.currentTimeMillis()) {
+            recentHits.remove(mob.getUniqueId());
+            return null;
+        }
+        return Bukkit.getPlayer(hit.playerId());
+    }
+
+    private void markExplosion(Location location, Player source) {
+        double radius = explosionRadius();
+        for (Entity entity : location.getWorld().getNearbyEntities(location, radius, radius, radius)) {
+            if (!(entity instanceof LivingEntity living) || !isEligible(living)) continue;
+            Player responsible = source;
+            if (responsible == null) responsible = recentAttacker(living);
+            if (responsible == null) responsible = nearestPlayer(location, radius);
+            if (responsible != null) remember(living, responsible);
+        }
+    }
+
+    private Player nearestPlayer(Location location, double radius) {
+        return location.getWorld().getNearbyPlayers(location, radius).stream()
+                .min(Comparator.comparingDouble(player ->
+                        player.getLocation().distanceSquared(location)))
+                .orElse(null);
+    }
+
+    private Player resolvePlayer(Entity entity) {
+        if (entity instanceof Player player) return player;
+        if (entity instanceof Projectile projectile && projectile.getShooter() instanceof Player player) {
+            return player;
+        }
+        if (entity instanceof TNTPrimed tnt && tnt.getSource() instanceof Player player) {
+            return player;
+        }
+        if (entity instanceof Tameable tameable && tameable.getOwner() instanceof Player player) {
+            return player;
+        }
+        return null;
+    }
+
+    private record Hit(UUID playerId, long expiresAt) {}
 }
