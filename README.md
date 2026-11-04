@@ -28,6 +28,19 @@ spawn-control:
 
 Change `region` to your WorldGuard region ID and add allowed entity types to `allowed-mobs`. Any other living entity spawn inside that region is cancelled. With `override-mob-spawning-deny: true`, whitelisted mobs are allowed to spawn even when that region has WorldGuard's `mob-spawning: deny` flag. Set it to `false` to respect WorldGuard's deny flag for every mob, or set `enabled: false` to disable this rule.
 
+## Mob bounty amount and size
+
+Edit these settings in `config.yml`:
+
+```yaml
+bounty:
+  minimum: 100000
+  maximum: 30000000
+  size: 1.0
+```
+
+`minimum` and `maximum` define the random bounty range. `size` controls mob scale (`1.0` is normal, `2.0` is twice as large, and `0.5` is half size). Run `/flipmobs reload` after changing the values. Reload re-rolls the bounty and refreshes the visible amount for every currently loaded eligible mob, and applies the configured size to them. Newly spawned mobs use the same settings.
+
 ## Economy
 
 Set `economy.provider` to `VAULT`, `COINSENGINE`, or `EXCELLENTECONOMY`. For CoinsEngine and ExcellentEconomy, enable their Vault integration. `economy.symbol` changes the displayed symbol.
@@ -47,7 +60,7 @@ Build with JDK 21 and Maven:
 mvn clean package
 ```
 
-Jar: `target/FlipMobs-1.3.2.jar`
+Jar: `target/FlipMobs-1.3.3.jar`
 
 
 ### Managed spawning in the WorldGuard region
