@@ -10,6 +10,7 @@ import com.sk89q.worldguard.protection.regions.ProtectedRegion;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
 import org.bukkit.block.Block;
+import org.bukkit.attribute.Attribute;
 import org.bukkit.entity.EntityType;
 import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.Location;
@@ -55,7 +56,9 @@ public final class MobBountyListener implements Listener {
         for (var world : Bukkit.getWorlds()) {
             for (LivingEntity entity : world.getLivingEntities()) {
                 if (isEligible(entity)) {
-                    if (getBounty(entity) <= 0) assignBounty(entity);
+                    // Re-roll existing mobs so changed min/max values take effect on reload.
+                    assignBounty(entity);
+                    applyConfiguredSize(entity);
                     updateLabel(entity);
                 }
             }
@@ -307,6 +310,7 @@ public final class MobBountyListener implements Listener {
     private void ensureBounty(LivingEntity entity) {
         if (!isEligible(entity)) return;
         if (getBounty(entity) <= 0) assignBounty(entity);
+        applyConfiguredSize(entity);
         updateLabel(entity);
     }
 
@@ -315,6 +319,14 @@ public final class MobBountyListener implements Listener {
         double maximum = Math.max(minimum, plugin.getConfig().getDouble("bounty.maximum", 30000000));
         double amount = Math.floor((minimum + Math.random() * (maximum - minimum)) * 100.0) / 100.0;
         entity.getPersistentDataContainer().set(bountyKey, PersistentDataType.DOUBLE, amount);
+    }
+
+    private void applyConfiguredSize(LivingEntity entity) {
+        double configuredSize = plugin.getConfig().getDouble("bounty.size", 1.0);
+        // Bukkit's SCALE attribute is bounded; clamp config values to a safe supported range.
+        double size = Math.max(0.0625, Math.min(16.0, configuredSize));
+        var scale = entity.getAttribute(Attribute.SCALE);
+        if (scale != null) scale.setBaseValue(size);
     }
 
     private void updateLabel(LivingEntity entity) {
