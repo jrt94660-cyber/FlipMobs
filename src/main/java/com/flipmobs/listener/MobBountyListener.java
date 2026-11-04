@@ -5,12 +5,13 @@ import com.flipmobs.economy.EconomyHook;
 import com.flipmobs.util.MoneyFormatter;
 import com.sk89q.worldedit.math.BlockVector3;
 import com.sk89q.worldguard.WorldGuard;
-import com.sk89q.worldguard.protection.flags.Flags;
-import com.sk89q.worldguard.protection.flags.StateFlag;
 import com.sk89q.worldguard.protection.managers.RegionManager;
 import com.sk89q.worldguard.protection.regions.ProtectedRegion;
 import net.kyori.adventure.text.Component;
 import org.bukkit.Bukkit;
+import org.bukkit.block.Block;
+import org.bukkit.entity.EntityType;
+import org.bukkit.scheduler.BukkitTask;
 import org.bukkit.Location;
 import org.bukkit.NamespacedKey;
 import org.bukkit.entity.*;
@@ -26,6 +27,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.ConcurrentHashMap;
 
 public final class MobBountyListener implements Listener {
@@ -33,6 +35,7 @@ public final class MobBountyListener implements Listener {
     private final EconomyHook economy;
     private final NamespacedKey bountyKey;
     private final Map<UUID, Hit> recentHits = new ConcurrentHashMap<>();
+    private BukkitTask managedSpawnerTask;
 
     public MobBountyListener(FlipMobs plugin, EconomyHook economy) {
         this.plugin = plugin;
@@ -59,8 +62,109 @@ public final class MobBountyListener implements Listener {
         }
     }
 
+    public void startManagedSpawner() {
+        if (!plugin.getConfig().getBoolean("spawn-control.enabled", true)
+                || !plugin.getConfig().getBoolean("spawn-control.managed-spawning.enabled", true)) return;
+        long interval = Math.max(20L, plugin.getConfig().getLong(
+                "spawn-control.managed-spawning.interval-ticks", 100L));
+        managedSpawnerTask = Bukkit.getScheduler().runTaskTimer(
+                plugin, this::runManagedSpawner, 20L, interval);
+    }
+
     public void shutdown() {
+        if (managedSpawnerTask != null) {
+            managedSpawnerTask.cancel();
+            managedSpawnerTask = null;
+        }
         recentHits.clear();
+    }
+
+    /*
+     * WorldGuard may stop vanilla natural-spawn attempts before an
+     * EntitySpawnEvent is fired. This managed spawner creates configured
+     * whitelist mobs directly inside the selected region.
+     */
+    private void runManagedSpawner() {
+        if (!plugin.getConfig().getBoolean("spawn-control.enabled", true)
+                || !plugin.getConfig().getBoolean("spawn-control.managed-spawning.enabled", true)) return;
+
+        List<String> allowedNames = plugin.getConfig().getStringList("spawn-control.allowed-mobs");
+        if (allowedNames.isEmpty()) return;
+
+        int maxMobs = Math.max(0, plugin.getConfig().getInt(
+                "spawn-control.managed-spawning.max-mobs", 10));
+        int attempts = Math.max(1, plugin.getConfig().getInt(
+                "spawn-control.managed-spawning.attempts-per-cycle", 8));
+        if (maxMobs == 0) return;
+
+        for (org.bukkit.World world : Bukkit.getWorlds()) {
+            ProtectedRegion region = findConfiguredRegion(world);
+            if (region == null) continue;
+
+            List<EntityType> allowedTypes = allowedNames.stream()
+                    .map(name -> {
+                        try { return EntityType.valueOf(name.trim().toUpperCase(java.util.Locale.ROOT)); }
+                        catch (IllegalArgumentException ex) { return null; }
+                    })
+                    .filter(type -> type != null && type.getEntityClass() != null
+                            && LivingEntity.class.isAssignableFrom(type.getEntityClass())
+                            && type != EntityType.PLAYER)
+                    .toList();
+            if (allowedTypes.isEmpty()) continue;
+
+            int current = 0;
+            for (LivingEntity entity : world.getLivingEntities()) {
+                Location loc = entity.getLocation();
+                if (region.contains(BlockVector3.at(loc.getBlockX(), loc.getBlockY(), loc.getBlockZ()))
+                        && allowedNames.contains(entity.getType().name())) current++;
+            }
+            int needed = maxMobs - current;
+            if (needed <= 0) continue;
+
+            int spawned = 0;
+            for (int i = 0; i < attempts && spawned < needed; i++) {
+                int x = randomBetween(region.getMinimumPoint().getBlockX(), region.getMaximumPoint().getBlockX());
+                int z = randomBetween(region.getMinimumPoint().getBlockZ(), region.getMaximumPoint().getBlockZ());
+                int y = world.getHighestBlockYAt(x, z) + 1;
+                if (y < region.getMinimumPoint().getBlockY()
+                        || y > region.getMaximumPoint().getBlockY()
+                        || !region.contains(BlockVector3.at(x, y, z))) continue;
+
+                Block floor = world.getBlockAt(x, y - 1, z);
+                Block feet = world.getBlockAt(x, y, z);
+                Block head = world.getBlockAt(x, y + 1, z);
+                if (!floor.getType().isSolid() || floor.isLiquid()
+                        || !feet.isPassable() || feet.isLiquid()
+                        || !head.isPassable() || head.isLiquid()) continue;
+
+                EntityType type = allowedTypes.get(ThreadLocalRandom.current().nextInt(allowedTypes.size()));
+                try {
+                    Class<? extends LivingEntity> entityClass =
+                            type.getEntityClass().asSubclass(LivingEntity.class);
+                    LivingEntity mob = world.spawn(new Location(world, x + 0.5, y, z + 0.5),
+                            entityClass, CreatureSpawnEvent.SpawnReason.CUSTOM);
+                    if (mob != null && mob.isValid()) {
+                        ensureBounty(mob);
+                        spawned++;
+                    }
+                } catch (IllegalArgumentException ex) {
+                    plugin.getLogger().fine("Could not spawn configured mob " + type + ": " + ex.getMessage());
+                }
+            }
+        }
+    }
+
+    private int randomBetween(int min, int max) {
+        if (max <= min) return min;
+        return ThreadLocalRandom.current().nextInt(min, max + 1);
+    }
+
+    private ProtectedRegion findConfiguredRegion(org.bukkit.World world) {
+        String regionId = plugin.getConfig().getString("spawn-control.region", "spawn");
+        if (regionId == null || regionId.isBlank()) return null;
+        RegionManager manager = WorldGuard.getInstance().getPlatform().getRegionContainer()
+                .get(com.sk89q.worldedit.bukkit.BukkitAdapter.adapt(world));
+        return manager == null ? null : manager.getRegion(regionId.toLowerCase(java.util.Locale.ROOT));
     }
 
     /*
@@ -87,7 +191,9 @@ public final class MobBountyListener implements Listener {
         // selectively restore only the explicitly whitelisted mob types.
         boolean overrideDeny = plugin.getConfig().getBoolean(
                 "spawn-control.override-mob-spawning-deny", true);
-        if (overrideDeny && region.getFlag(Flags.MOB_SPAWNING) == StateFlag.State.DENY) {
+        if (overrideDeny) {
+            // The configured whitelist is authoritative inside this region,
+            // including when WorldGuard inherits mob-spawning: deny.
             event.setCancelled(false);
         }
     }
