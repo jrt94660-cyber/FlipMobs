@@ -63,6 +63,10 @@ public final class MobBountyListener implements Listener {
     }
 
     public void startManagedSpawner() {
+        if (managedSpawnerTask != null) {
+            managedSpawnerTask.cancel();
+            managedSpawnerTask = null;
+        }
         if (!plugin.getConfig().getBoolean("spawn-control.enabled", true)
                 || !plugin.getConfig().getBoolean("spawn-control.managed-spawning.enabled", true)) return;
         long interval = Math.max(20L, plugin.getConfig().getLong(
