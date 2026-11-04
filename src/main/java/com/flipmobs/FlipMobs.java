@@ -18,6 +18,7 @@ public final class FlipMobs extends JavaPlugin {
         bountyListener = new MobBountyListener(this, economyHook);
         getServer().getPluginManager().registerEvents(bountyListener, this);
         bountyListener.initializeLoadedMobs();
+        bountyListener.startManagedSpawner();
         getLogger().info("FlipMobs enabled. Provider: " + getConfig().getString("economy.provider", "VAULT"));
     }
 
@@ -37,6 +38,7 @@ public final class FlipMobs extends JavaPlugin {
             reloadConfig();
             economyHook.reload();
             bountyListener.refreshLoadedMobLabels();
+            bountyListener.startManagedSpawner();
             sender.sendMessage(color(getConfig().getString("messages.prefix", "") +
                     getConfig().getString("messages.reloaded", "&aReloaded.")));
             return true;
