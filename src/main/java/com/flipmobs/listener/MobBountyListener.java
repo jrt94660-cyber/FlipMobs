@@ -108,9 +108,12 @@ public final class MobBountyListener implements Listener {
             ProtectedRegion region = findConfiguredRegion(world);
             if (region == null) continue;
 
-            List<EntityType> allowedTypes = allowedNames.stream()
+            List<String> normalizedAllowed = allowedNames.stream()
+                    .map(name -> name.trim().toUpperCase(java.util.Locale.ROOT))
+                    .toList();
+            List<EntityType> allowedTypes = normalizedAllowed.stream()
                     .map(name -> {
-                        try { return EntityType.valueOf(name.trim().toUpperCase(java.util.Locale.ROOT)); }
+                        try { return EntityType.valueOf(name); }
                         catch (IllegalArgumentException ex) { return null; }
                     })
                     .filter(type -> type != null && type.getEntityClass() != null
@@ -119,12 +122,20 @@ public final class MobBountyListener implements Listener {
                     .toList();
             if (allowedTypes.isEmpty()) continue;
 
-            int current = 0;
+            // Enforce a hard regional cap. Remove excess allowed mobs left over
+            // from older configs/reloads before calculating how many to add.
+            List<LivingEntity> inRegion = new java.util.ArrayList<>();
             for (LivingEntity entity : world.getLivingEntities()) {
                 Location loc = entity.getLocation();
-                if (region.contains(BlockVector3.at(loc.getBlockX(), loc.getBlockY(), loc.getBlockZ()))
-                        && allowedNames.contains(entity.getType().name())) current++;
+                if (normalizedAllowed.contains(entity.getType().name())
+                        && region.contains(BlockVector3.at(loc.getBlockX(), loc.getBlockY(), loc.getBlockZ()))) {
+                    inRegion.add(entity);
+                }
             }
+            for (int i = maxMobs; i < inRegion.size(); i++) {
+                inRegion.get(i).remove();
+            }
+            int current = Math.min(inRegion.size(), maxMobs);
             int needed = maxMobs - current;
             if (needed <= 0) continue;
 
@@ -187,7 +198,18 @@ public final class MobBountyListener implements Listener {
         if (region == null) return;
 
         List<String> allowed = plugin.getConfig().getStringList("spawn-control.allowed-mobs");
-        if (!allowed.contains(living.getType().name())) {
+        if (!allowed.stream().map(name -> name.trim().toUpperCase(java.util.Locale.ROOT))
+                .anyMatch(name -> name.equals(living.getType().name()))) {
+            event.setCancelled(true);
+            return;
+        }
+
+        // When managed spawning is enabled, CUSTOM is the only permitted spawn
+        // reason in this region. This prevents vanilla, spawner, egg and other
+        // sources from bypassing the configured max-mobs cap.
+        if (plugin.getConfig().getBoolean("spawn-control.managed-spawning.enabled", true)
+                && event instanceof CreatureSpawnEvent creatureEvent
+                && creatureEvent.getSpawnReason() != CreatureSpawnEvent.SpawnReason.CUSTOM) {
             event.setCancelled(true);
             return;
         }
