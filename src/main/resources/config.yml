@@ -22,12 +22,11 @@ spawn-control:
   override-mob-spawning-deny: true
   allowed-mobs:
     - BAT
-  # FlipMobs-managed spawning replaces vanilla natural spawning in this region
-  # when WorldGuard blocks it. Only the allowed-mobs list is spawned.
+  # FlipMobs exclusively controls allowed mob spawning in this region so the cap is enforced.
   managed-spawning:
     enabled: true
     interval-ticks: 100
-    max-mobs: 10
+    max-mobs: 5
     attempts-per-cycle: 12
 
 economy:
