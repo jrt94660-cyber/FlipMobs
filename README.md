@@ -60,9 +60,14 @@ Build with JDK 21 and Maven:
 mvn clean package
 ```
 
-Jar: `target/FlipMobs-1.3.3.jar`
+Jar: `target/FlipMobs-1.3.4.jar`
 
 
 ### Managed spawning in the WorldGuard region
 
 When `spawn-control.managed-spawning.enabled` is true, FlipMobs periodically spawns only the mob types listed in `spawn-control.allowed-mobs` inside the configured region. `interval-ticks` controls the spawn check interval, `max-mobs` sets the regional cap, and `attempts-per-cycle` controls how many spawn locations are tried per check. This allows the configured mobs to populate the region even when WorldGuard's `mob-spawning` flag is set to `deny`.
+
+
+### Managed spawn limit
+
+`spawn-control.managed-spawning.max-mobs` is a hard per-world, per-region cap. While managed spawning is enabled, only FlipMobs `CUSTOM` spawns are allowed for the configured mob whitelist; natural, spawner, egg, and other spawn sources are blocked in that region. If the region already contains more allowed mobs than the cap, excess mobs are removed on the next managed-spawn cycle.
