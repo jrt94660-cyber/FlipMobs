@@ -37,9 +37,10 @@ bounty:
   minimum: 100000
   maximum: 30000000
   size: 1.0
+  health: 20.0
 ```
 
-`minimum` and `maximum` define the random bounty range. `size` controls mob scale (`1.0` is normal, `2.0` is twice as large, and `0.5` is half size). Run `/flipmobs reload` after changing the values. Reload re-rolls the bounty and refreshes the visible amount for every currently loaded eligible mob. The configured size applies ONLY to mobs whose type is listed in `spawn-control.allowed-mobs` while they are inside the configured WorldGuard region; all other mobs are kept at normal scale. Newly spawned whitelisted mobs inside that region use the configured size.
+`minimum` and `maximum` define the random bounty range. `size` controls mob scale (`1.0` is normal, `2.0` is twice as large, and `0.5` is half size). `health` sets maximum health in HP (`20.0` is the normal default, `40.0` is double health). Run `/flipmobs reload` after changing the values. Reload re-rolls the bounty and refreshes the visible amount for every currently loaded eligible mob. The configured size and health apply ONLY to mobs whose type is listed in `spawn-control.allowed-mobs` while they are inside the configured WorldGuard region. Other mobs are not given the custom health; non-whitelisted mobs are kept at normal scale. Newly spawned whitelisted mobs inside that region use both configured settings. Reload applies the updated health to currently loaded whitelisted spawn mobs.
 
 ## Economy
 
@@ -60,7 +61,7 @@ Build with JDK 21 and Maven:
 mvn clean package
 ```
 
-Jar: `target/FlipMobs-1.3.5.jar`
+Jar: `target/FlipMobs-1.3.6.jar`
 
 
 ### Managed spawning in the WorldGuard region
