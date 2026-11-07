@@ -5,6 +5,8 @@ bounty:
   # Mob model scale: 1.0 = normal, 2.0 = twice as large, 0.5 = half size.
   # Applies ONLY to allowed-mobs inside the configured WorldGuard spawn region. Other mobs stay normal size.
   size: 1.0
+  # Maximum health in HP. Applies ONLY to allowed-mobs inside the configured WorldGuard spawn region.
+  health: 20.0
   name-format: "&6$%amount%"
   show-on-all-mobs: true
   exclude:
