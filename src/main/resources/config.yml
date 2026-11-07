@@ -3,7 +3,7 @@ bounty:
   minimum: 100000
   maximum: 30000000
   # Mob model scale: 1.0 = normal, 2.0 = twice as large, 0.5 = half size.
-  # Applies to existing loaded mobs and newly spawned mobs.
+  # Applies ONLY to allowed-mobs inside the configured WorldGuard spawn region. Other mobs stay normal size.
   size: 1.0
   name-format: "&6$%amount%"
   show-on-all-mobs: true
