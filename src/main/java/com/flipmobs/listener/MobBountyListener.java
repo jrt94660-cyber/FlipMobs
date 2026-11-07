@@ -59,6 +59,7 @@ public final class MobBountyListener implements Listener {
                     // Re-roll existing mobs so changed min/max values take effect on reload.
                     assignBounty(entity);
                     applyConfiguredSize(entity);
+                    applyConfiguredHealth(entity);
                     updateLabel(entity);
                 }
             }
@@ -333,6 +334,7 @@ public final class MobBountyListener implements Listener {
         if (!isEligible(entity)) return;
         if (getBounty(entity) <= 0) assignBounty(entity);
         applyConfiguredSize(entity);
+        applyConfiguredHealth(entity);
         updateLabel(entity);
     }
 
@@ -343,20 +345,21 @@ public final class MobBountyListener implements Listener {
         entity.getPersistentDataContainer().set(bountyKey, PersistentDataType.DOUBLE, amount);
     }
 
+    private boolean isAllowedSpawnMob(LivingEntity entity) {
+        if (getRestrictedRegion(entity.getLocation()) == null) return false;
+        return plugin.getConfig().getStringList("spawn-control.allowed-mobs")
+                .stream()
+                .map(name -> name.trim().toUpperCase(java.util.Locale.ROOT))
+                .anyMatch(name -> name.equals(entity.getType().name()));
+    }
+
     private void applyConfiguredSize(LivingEntity entity) {
         var scale = entity.getAttribute(Attribute.SCALE);
         if (scale == null) return;
 
-        // Size customization is exclusive to whitelisted mobs while they are
-        // inside the configured WorldGuard spawn region. Restore every other
-        // mob to the normal scale so old global-size settings do not linger.
-        boolean inSpawnRegion = getRestrictedRegion(entity.getLocation()) != null;
-        boolean allowedInRegion = plugin.getConfig().getStringList("spawn-control.allowed-mobs")
-                .stream()
-                .map(name -> name.trim().toUpperCase(java.util.Locale.ROOT))
-                .anyMatch(name -> name.equals(entity.getType().name()));
-
-        if (!inSpawnRegion || !allowedInRegion) {
+        // Size customization is exclusive to whitelisted mobs inside the
+        // configured WorldGuard region. Other mobs remain at normal scale.
+        if (!isAllowedSpawnMob(entity)) {
             scale.setBaseValue(1.0);
             return;
         }
@@ -365,6 +368,24 @@ public final class MobBountyListener implements Listener {
         // Bukkit's SCALE attribute is bounded; clamp config values to a safe supported range.
         double size = Math.max(0.0625, Math.min(16.0, configuredSize));
         scale.setBaseValue(size);
+    }
+
+    private void applyConfiguredHealth(LivingEntity entity) {
+        // Health customization uses the same spawn-region whitelist as size.
+        // All other mobs keep their own normal/default health attributes.
+        if (!isAllowedSpawnMob(entity)) return;
+
+        var maxHealth = entity.getAttribute(Attribute.MAX_HEALTH);
+        if (maxHealth == null) return;
+
+        double configuredHealth = plugin.getConfig().getDouble("bounty.health", 20.0);
+        double health = Math.max(1.0, Math.min(1024.0, configuredHealth));
+        maxHealth.setBaseValue(health);
+        // Newly configured/reloaded spawn mobs start at their configured full health.
+        entity.setHealth(Math.min(entity.getHealth(), maxHealth.getValue()));
+        if (entity.getHealth() < maxHealth.getValue()) {
+            entity.setHealth(maxHealth.getValue());
+        }
     }
 
     private void updateLabel(LivingEntity entity) {
