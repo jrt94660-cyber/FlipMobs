@@ -344,11 +344,27 @@ public final class MobBountyListener implements Listener {
     }
 
     private void applyConfiguredSize(LivingEntity entity) {
+        var scale = entity.getAttribute(Attribute.SCALE);
+        if (scale == null) return;
+
+        // Size customization is exclusive to whitelisted mobs while they are
+        // inside the configured WorldGuard spawn region. Restore every other
+        // mob to the normal scale so old global-size settings do not linger.
+        boolean inSpawnRegion = getRestrictedRegion(entity.getLocation()) != null;
+        boolean allowedInRegion = plugin.getConfig().getStringList("spawn-control.allowed-mobs")
+                .stream()
+                .map(name -> name.trim().toUpperCase(java.util.Locale.ROOT))
+                .anyMatch(name -> name.equals(entity.getType().name()));
+
+        if (!inSpawnRegion || !allowedInRegion) {
+            scale.setBaseValue(1.0);
+            return;
+        }
+
         double configuredSize = plugin.getConfig().getDouble("bounty.size", 1.0);
         // Bukkit's SCALE attribute is bounded; clamp config values to a safe supported range.
         double size = Math.max(0.0625, Math.min(16.0, configuredSize));
-        var scale = entity.getAttribute(Attribute.SCALE);
-        if (scale != null) scale.setBaseValue(size);
+        scale.setBaseValue(size);
     }
 
     private void updateLabel(LivingEntity entity) {
